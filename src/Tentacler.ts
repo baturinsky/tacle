@@ -1,5 +1,5 @@
-import { Color, drawLine, drawTile, enablePhysicsSolver, EngineObject, vec2, Vector2 } from "./littlejs.esm";
-import { grid, playerPos, scramble, spriteAtlas, tentaclers, xy } from "./main";
+import { Color, drawLine, drawTile, enablePhysicsSolver, EngineObject, hsl, vec2, Vector2 } from "./littlejs.esm";
+import { grid, player, playerPos, scramble, spriteAtlas, tentaclers, unlocked, xy } from "./main";
 import * as EasyStar from 'easystarjs'
 
 let est = new EasyStar.js();
@@ -12,20 +12,24 @@ export class Tentacler extends EngineObject {
   pathToPlayer: Vector2[] = [];
   tacle: Vector2[] = [];
   color: Color
+  tacleColor: Color
 
-  constructor(pos: Vector2, maxLength:number = 6, color=new Color(1, 0, 0)) {
+  constructor(pos: Vector2, maxLength: number = 6, color = new Color(1, 0, 0)) {
     super(pos, vec2(1, 1))
     this.maxLength = maxLength;
     this.setCollision();
     this.color = color;
     this.mass = 0;
-    est.setTileCost(0, 1)
-    est.setTileCost(2, 0.5)
-    est.setAcceptableTiles([0, 2])
+    est.setTileCost(0, 3)
+    est.setTileCost(2, 2)
+    let h: number[] = this.color.HSLA();
+    h[2] *= 0.7;
+    this.tacleColor = hsl(...h);
   }
 
   calculatePath() {
     let myGrid: number[][] = [];
+    est.setAcceptableTiles(unlocked ? [0, 2, 3] : [0, 2])
 
     for (let y = 0; y < grid.length; y++) {
       myGrid[y] = [...grid[y]]
@@ -36,7 +40,8 @@ export class Tentacler extends EngineObject {
         let p = t.tacle[i]
         if (!p)
           continue;
-        myGrid[p.y][p.x] = t == this ? 2 : 1;
+        let v = t == this ? 2 : 1
+        myGrid[p.y][p.x] = v;
       }
     }
 
@@ -66,16 +71,16 @@ export class Tentacler extends EngineObject {
       }
     }
 
-    if (commonLength < this.tacleLength) {
+    if (commonLength <= this.tacleLength) {
       this.reduceTacle();
-    } else if(this.tacleLength < this.maxLength){
+    } else if (this.tacleLength < this.maxLength) {
       this.expandTacle();
     }
 
   }
 
   reduceTacle() {
-    this.tacleLength -= 0.1;
+    this.tacleLength -= 0.04;
   }
 
   expandTacle() {
@@ -84,9 +89,10 @@ export class Tentacler extends EngineObject {
   }
 
   render() {
-    this.tileInfo = spriteAtlas.enemy;
+    let happy = player?.caughtBy == this;
+    this.tileInfo = spriteAtlas.enemy.frame(happy ? 0 : 1);
 
-    let vpath = this.tacle.map(v => scramble(v, 0.1));
+    let vpath = this.tacle.map(v => scramble(v, player?.caughtBy?0.2:0.1));
 
     let remaining = this.tacleLength;
     vpath.forEach((v, i) => {
@@ -94,12 +100,12 @@ export class Tentacler extends EngineObject {
         return;
       let a = v;
       if (remaining < 1) {
-        if(remaining<0.1)
+        if (remaining < 0.1)
           return
         a = a.copy().subtract(vpath[i - 1]).scale(remaining).add(vpath[i - 1]);
       }
       let width = Math.min(0.3, 0.1 + 0.3 * (this.tacleLength - i) / this.tacleLength);
-      drawLine(a, vpath[i - 1], width, this.color)
+      drawLine(a, vpath[i - 1], width, this.tacleColor)
       remaining--;
     })
 

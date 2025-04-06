@@ -742,31 +742,6 @@
     }
   });
 
-  // node_modules/easystarjs/levels.ts
-  var levelsString = `
-##########
-#        T
-#   #    #
-#  ###   #
-# @#     #
-#  #     #
-#    #   #
-#    #   t
-##########
-=
-***************
-t             *
-*  ********   *
-*  *          *
-*  *    **    *
-*  *  *       *
-*     **  *   *
-*  *  @   *   *
-*  ********   *
-*             *
-****T********** 
-`;
-
   // src/littlejs.esm.js
   var debug = true;
   var enableAsserts = true;
@@ -1528,6 +1503,9 @@ t             *
   }
   function setCameraScale(scale) {
     cameraScale = scale;
+  }
+  function setCanvasFixedSize(size) {
+    canvasFixedSize = size;
   }
   var EngineObject = class {
     /** Create an engine object and adds it to the list of objects
@@ -2988,12 +2966,15 @@ t             *
       this.setCollision();
       this.color = color;
       this.mass = 0;
-      est.setTileCost(0, 1);
-      est.setTileCost(2, 0.5);
-      est.setAcceptableTiles([0, 2]);
+      est.setTileCost(0, 3);
+      est.setTileCost(2, 2);
+      let h = this.color.HSLA();
+      h[2] *= 0.7;
+      this.tacleColor = hsl(...h);
     }
     calculatePath() {
       let myGrid = [];
+      est.setAcceptableTiles(unlocked ? [0, 2, 3] : [0, 2]);
       for (let y = 0; y < grid.length; y++) {
         myGrid[y] = [...grid[y]];
       }
@@ -3002,7 +2983,8 @@ t             *
           let p = t.tacle[i];
           if (!p)
             continue;
-          myGrid[p.y][p.x] = t == this ? 2 : 1;
+          let v = t == this ? 2 : 1;
+          myGrid[p.y][p.x] = v;
         }
       }
       est.setGrid(myGrid);
@@ -3026,22 +3008,23 @@ t             *
           break;
         }
       }
-      if (commonLength < this.tacleLength) {
+      if (commonLength <= this.tacleLength) {
         this.reduceTacle();
       } else if (this.tacleLength < this.maxLength) {
         this.expandTacle();
       }
     }
     reduceTacle() {
-      this.tacleLength -= 0.1;
+      this.tacleLength -= 0.04;
     }
     expandTacle() {
       this.tacle = this.pathToPlayer;
       this.tacleLength += 0.05;
     }
     render() {
-      this.tileInfo = spriteAtlas.enemy;
-      let vpath = this.tacle.map((v) => scramble(v, 0.1));
+      let happy = player?.caughtBy == this;
+      this.tileInfo = spriteAtlas.enemy.frame(happy ? 0 : 1);
+      let vpath = this.tacle.map((v) => scramble(v, player?.caughtBy ? 0.2 : 0.1));
       let remaining = this.tacleLength;
       vpath.forEach((v, i) => {
         if (i == 0 || remaining < 0)
@@ -3053,7 +3036,7 @@ t             *
           a = a.copy().subtract(vpath[i - 1]).scale(remaining).add(vpath[i - 1]);
         }
         let width = Math.min(0.3, 0.1 + 0.3 * (this.tacleLength - i) / this.tacleLength);
-        drawLine(a, vpath[i - 1], width, this.color);
+        drawLine(a, vpath[i - 1], width, this.tacleColor);
         remaining--;
       });
       drawTile(this.pos, this.drawSize, this.tileInfo, this.color, this.angle, this.mirror);
@@ -3066,11 +3049,13 @@ t             *
       super(pos, vec2(0.7, 0.7));
       this.frame = 0;
       this.direction = 1;
-      this.drawSize = this.size;
+      this.drawSize = vec2(0.7, 0.7);
       this.setCollision(true, false);
       this.renderOrder = 1;
     }
     update() {
+      if (this.caughtBy)
+        return;
       const moveInput = this.moveInput.copy();
       if (moveInput.length() > 0) {
         this.frame++;
@@ -3079,12 +3064,28 @@ t             *
           this.mirror = this.direction < 0;
         }
       }
-      this.velocity = this.velocity.multiply(vec2(0.5)).add(vec2(0.05 * moveInput.x, 0.05 * moveInput.y));
+      let a = 0.5, b = 0.025;
+      this.velocity = this.velocity.multiply(vec2(a)).add(vec2(b * moveInput.x, b * moveInput.y));
+      this.caughtBy = null;
+      for (let t of tentaclers) {
+        for (let i = 0; i < t.tacleLength; i++) {
+          let p = t.tacle[i];
+          if (p?.distance(this.pos) < 0.7) {
+            if (!this.caughtBy) {
+              setTimeout(() => setLevel(), 1e3);
+            }
+            this.caughtBy = t;
+          }
+        }
+      }
       super.update();
     }
     render() {
       this.tileInfo = spriteAtlas.player.frame(~~(this.frame % 20 / 10));
       drawTile(this.pos, this.drawSize, this.tileInfo, this.color, this.angle, this.mirror);
+      if (this.caughtBy) {
+        drawRect(this.pos.add(scramble(vec2(-0.5, 0), 0.3)), scramble(vec2(3, 2), 0.3), new Color(0, 0, 0));
+      }
     }
     collideWithObject(object) {
       if (object instanceof Tentacler) {
@@ -3113,24 +3114,80 @@ t             *
     return vec2(p.x + Math.random() * v - 0.5 * v, p.y + Math.random() * v - 0.5 * v);
   }
   var levelSize = vec2(38, 20);
+  var currentLevel = 0;
   var sound_bounce = new Sound([, , 1e3, , 0.03, 0.02, 1, 2, , , 940, 0.03, , , , , 0.2, 0.6, , 0.06], 0);
   var sound_break = new Sound([, , 90, , 0.01, 0.03, 4, , , , , , , 9, 50, 0.2, , 0.2, 0.01], 0);
   var sound_start = new Sound([, 0, 500, , 0.04, 0.3, 1, 2, , , 570, 0.02, 0.02, , , , 0.04]);
   var tentaclers = [];
+  var unlocked = false;
   var Brick = class extends EngineObject {
     constructor(pos, size) {
       super(pos, size);
       this.setCollision();
       this.mass = 0;
       this.friction = 0;
-      this.renderOrder = 0;
       this.tileInfo = spriteAtlas.crate;
+      this.color = new Color(1, 0, 0);
+    }
+  };
+  var Stairs = class extends EngineObject {
+    constructor(pos, entrance = false) {
+      super(pos);
+      this.entrance = entrance;
+      this.tileInfo = spriteAtlas.ladder;
+      this.color = entrance ? new Color(0.2, 0.2, 0.2) : new Color(1.2, 1.2, 1.2);
+      if (entrance) {
+        this.mirror = true;
+      }
+      this.setCollision();
+    }
+    collideWithObject(object) {
+      if (!this.entrance && object instanceof Player) {
+        setLevel(currentLevel + 1);
+      }
+      return false;
+    }
+  };
+  var Lever = class extends EngineObject {
+    constructor(pos) {
+      super(pos);
+      this.setCollision();
+      this.size = vec2(0.5, 0.5);
+      this.drawSize = vec2(1, 1);
+      this.tileInfo = spriteAtlas.lever;
+    }
+    collideWithObject(object) {
+      if (object instanceof Player) {
+        unlocked = true;
+      }
+      this.color = unlocked ? new Color(0, 1, 0) : new Color(1, 0, 0);
+      return false;
+    }
+    render() {
+      this.mirror = unlocked;
+      super.render();
+    }
+  };
+  var Door = class extends EngineObject {
+    constructor(pos) {
+      super(pos);
+      this.setCollision();
+      this.mass = 0;
+      this.tileInfo = spriteAtlas.door;
+    }
+    update() {
+      this.setCollision(!unlocked, !unlocked);
+    }
+    render() {
+      this.tileInfo = spriteAtlas.door.frame(unlocked ? 1 : 0);
+      super.render();
     }
   };
   var player;
   var levelObjects = [];
   var spriteAtlas;
   function gameInit() {
+    setCanvasFixedSize(vec2(1280, 800));
     const gameTile = (i, size = 16) => tile(i, size, 0, 1);
     spriteAtlas = {
       // large tiles
@@ -3138,22 +3195,39 @@ t             *
       crate: gameTile(1),
       player: gameTile(2),
       enemy: gameTile(4),
-      coin: gameTile(5),
+      door: gameTile(6),
+      key: gameTile(8),
+      ladder: gameTile(9),
+      lever: gameTile(10),
       // small tiles
       gun: gameTile(vec2(0, 2), 8),
       grenade: gameTile(vec2(1, 2), 8)
     };
-    initLevel(0);
-    initLevel(1);
+    setLevel(1);
   }
   var grid = [];
   var playerPos;
   function setPlayerPos(p) {
     playerPos = p;
   }
-  function initLevel(n) {
+  document.onkeydown = (e) => {
+    let n = Number(e.key);
+    if (levels[n])
+      setLevel(n);
+    console.log(e);
+    if (e.code == "KeyR")
+      setLevel();
+  };
+  function setLevel(n) {
+    if (!n)
+      n = currentLevel;
+    if (n >= levels.length) {
+      n = 1;
+    }
+    currentLevel = n;
     let level = levels[n];
     tentaclers = [];
+    unlocked = false;
     for (let o of [...engineObjects]) {
       o.destroy();
     }
@@ -3163,39 +3237,71 @@ t             *
       for (let y = 0; y < levelSize.y; y++) {
         let c = level[levelSize.y - y - 1][x];
         let at = vec2(x, y);
-        let cost = 0;
+        let pathType = 0;
         if (c == "#" || c == "*") {
           new Brick(at, vec2(1, 1));
-          cost = 1;
+          pathType = 1;
         }
         if (c == "@") {
           player = new Player(at);
           playerPos = at;
+          new Stairs(at, true);
         }
         if (c == "T") {
-          tentaclers.push(new Tentacler(at, 15, new Color(0.5, 0.5, 0)));
+          tentaclers.push(new Tentacler(at, 15, new Color(1, 0, 0)));
         }
         if (c == "t") {
-          tentaclers.push(new Tentacler(at, 8, new Color(1, 0, 0)));
+          tentaclers.push(new Tentacler(at, 8, new Color(0.5, 0.5, 0)));
+        }
+        if (c == ">") {
+          new Stairs(at);
+        }
+        if (c == "/") {
+          new Lever(at);
+        }
+        if (c == "W") {
+          new Door(at);
+          pathType = 3;
         }
         grid[y] ||= [];
-        grid[y][x] = cost;
+        grid[y][x] = pathType;
       }
     setCameraPos(levelSize.scale(0.5));
-    setCameraScale(50);
+    setCameraScale(30);
   }
   function gameUpdate() {
   }
   function gameUpdatePost() {
   }
   function gameRender() {
-    drawRect(cameraPos.add(new Vector2(-0.5, -0.5)), levelSize, new Color(0, 0.2, 0.2));
+    if (player)
+      setCameraPos(player.pos);
+    drawRect(cameraPos.add(new Vector2(-0.5, -0.5)), mainCanvasSize.scale(2), new Color(0.1, 0, 0));
   }
   function gameRenderPost() {
+    drawTextScreen("Level " + currentLevel, vec2(mainCanvasSize.x / 2, 20), 50);
+    if (player?.caughtBy)
+      drawTextScreen("censored", worldToScreen(player.pos.add(vec2(-0.5, 0))), 20);
   }
   var levels = [];
+  function untiled(t) {
+    let s = "";
+    for (let d of t.layers.reverse()) {
+      s += "=\n";
+      let { width, height, data } = d;
+      data.forEach((v, i) => {
+        s += "  *@ TtWwK>/"[v];
+        if ((i + 1) % width == 0)
+          s += "\n";
+      });
+    }
+    return s;
+  }
   window.onload = () => {
-    let l1 = levelsString.split("=");
+    let ut = untiled(window["TileMaps"].l);
+    let ls = ut;
+    console.log(ls);
+    let l1 = ls.split("=");
     for (let level of l1) {
       let lines = level.trim().split("\n");
       levels.push(lines);

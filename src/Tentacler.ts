@@ -20,6 +20,7 @@ export class Tentacler extends EngineObject {
     this.setCollision();
     this.color = color;
     this.mass = 0;
+    this.drawSize = vec2(1,1);
     est.setTileCost(0, 3)
     est.setTileCost(2, 2)
     let h: number[] = this.color.HSLA();
@@ -80,19 +81,19 @@ export class Tentacler extends EngineObject {
   }
 
   reduceTacle() {
-    this.tacleLength -= 0.04;
+    this.tacleLength -= 0.003 * (10 + this.tacleLength);
   }
 
   expandTacle() {
     this.tacle = this.pathToPlayer;
-    this.tacleLength += 0.05;
+    this.tacleLength += 0.3 / (1 + Math.min(this.tacleLength, 10));
   }
 
   render() {
     let happy = player?.caughtBy == this;
     this.tileInfo = spriteAtlas.enemy.frame(happy ? 0 : 1);
 
-    let vpath = this.tacle.map(v => scramble(v, player?.caughtBy?0.2:0.1));
+    let vpath = this.tacle.map(v => scramble(v, player?.caughtBy ? 0.2 : 0.1));
 
     let remaining = this.tacleLength;
     vpath.forEach((v, i) => {
@@ -109,7 +110,7 @@ export class Tentacler extends EngineObject {
       remaining--;
     })
 
-    drawTile(this.pos, this.drawSize, this.tileInfo, this.color, this.angle, this.mirror);
+    drawTile(this.pos, this.drawSize.scale(1.1 - 0.3*(this.tacleLength/this.maxLength)**2), this.tileInfo, this.color, this.angle, this.mirror);
 
   }
 

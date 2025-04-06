@@ -1,5 +1,5 @@
 import { levelsString } from 'easystarjs/levels.js';
-import { tile, vec2, hsl, setShowSplashScreen, EngineObject, randColor, drawTextScreen, engineInit, mainCanvasSize, setCanvasFixedSize, cameraPos, Color, drawRect, setCameraPos, mousePos, clamp, canvasFixedSize, max, min, mouseWasPressed, ParticleEmitter, PI, Sound, setObjectDefaultDamping, Vector2, engineObjects, setCameraScale, TileInfo, debug, setTilesPixelated, drawText, worldToScreen } from './littlejs.esm.js'
+import { tile, vec2, hsl, setShowSplashScreen, EngineObject, randColor, drawTextScreen, engineInit, mainCanvasSize, setCanvasFixedSize, cameraPos, Color, drawRect, setCameraPos, mousePos, clamp, canvasFixedSize, max, min, mouseWasPressed, ParticleEmitter, PI, Sound, setObjectDefaultDamping, Vector2, engineObjects, setCameraScale, TileInfo, debug, setTilesPixelated, drawText, worldToScreen, frameRate, engineName, playSamples } from './littlejs.esm.js'
 import { Player } from './Player.js';
 import { Tentacler } from './Tentacler.js';
 
@@ -19,6 +19,11 @@ export let currentLevel = 0;
 const sound_bounce = new Sound([, , 1e3, , .03, .02, 1, 2, , , 940, .03, , , , , .2, .6, , .06], 0);
 const sound_break = new Sound([, , 90, , .01, .03, 4, , , , , , , 9, 50, .2, , .2, .01], 0);
 const sound_start = new Sound([, 0, 500, , .04, .3, 1, 2, , , 570, .02, .02, , , , .04]);
+export const blip = new Sound([2, , 569, .02, .01, .03, 3, 1.8, 10, 29, , , , .6, , , .06, , .01, .02]);
+export const hum = new Sound([.5,0,97.99886,.18,.62,.16,,2.5,,,,,,.3,,.1,.03,.33,.19,,184]); 
+export const sssh = new Sound([.1,,87,.09,.04,.53,4,3.2,1,1,,,.29,.4,15,.2,.21,.36,.26,.04,698]); // Explosion 20
+export const step = new Sound([.5,,293.66,,.01,.07,4,3.5,,,,,,.2,-1,.4,.05,.73,.06,,-2497]); // Hit 44 - Mutation 3
+export const step2 = new Sound([.1,,922,.01,,,,5,,,,,,9])
 
 //setTilesPixelated(false)
 
@@ -142,20 +147,22 @@ export function setPlayerPos(p: Vector2) {
   playerPos = p;
 }
 
-document.onkeydown = (e=>{
+document.onkeydown = (e => {
   let n = Number(e.key);
-  if(levels[n])
+  if (levels[n])
     setLevel(n)
-  console.log(e);
-  if(e.code == "KeyR")
-      setLevel()
+  //console.log(e);
+  if (e.code == "KeyR")
+    setLevel()
 })
 
 export function setLevel(n?: number) {
   if (!n)
     n = currentLevel;
 
-  if(n>=levels.length){
+  sound_start.play();
+
+  if (n >= levels.length) {
     n = 1;
   }
   currentLevel = n;
@@ -189,6 +196,9 @@ export function setLevel(n?: number) {
       }
       if (c == "t") {
         tentaclers.push(new Tentacler(at, 8, new Color(0.5, 0.5, 0)))
+      }
+      if (c == "F") {
+        tentaclers.push(new Tentacler(at, 70, new Color(0.5, 0, 0.5)))
       }
       if (c == ">") {
         new Stairs(at)
@@ -231,7 +241,7 @@ function gameRender() {
 ///////////////////////////////////////////////////////////////////////////////
 function gameRenderPost() {
   //drawRect(vec2(0,0), mainCanvasSize, new Color(0.1,0.1,0.1))
-  drawTextScreen("Level " + currentLevel, vec2(mainCanvasSize.x/2, 20), 50); // show score
+  drawTextScreen("Level " + currentLevel, vec2(mainCanvasSize.x / 2, 20), 50); // show score
   if (player?.caughtBy)
     drawTextScreen("censored", worldToScreen(player.pos.add(vec2(-0.5, 0))), 20)
 }
@@ -247,7 +257,7 @@ function untiled(t) {
     s += "=\n";
     let { width, height, data } = d;
     data.forEach((v, i) => {
-      s += "  *@ TtWwK>/"[v];
+      s += "  *@ TtWwK>/F"[v];
       if ((i + 1) % width == 0)
         s += "\n";
     })
@@ -261,7 +271,7 @@ window.onload = () => {
 
   let ls = ut;
 
-  console.log(ls);
+  //console.log(ls);
 
   let l1 = ls.split("=");
   for (let level of l1) {

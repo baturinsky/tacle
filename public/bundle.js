@@ -2966,6 +2966,7 @@
       this.setCollision();
       this.color = color;
       this.mass = 0;
+      this.drawSize = vec2(1, 1);
       est.setTileCost(0, 3);
       est.setTileCost(2, 2);
       let h = this.color.HSLA();
@@ -3015,11 +3016,11 @@
       }
     }
     reduceTacle() {
-      this.tacleLength -= 0.04;
+      this.tacleLength -= 3e-3 * (10 + this.tacleLength);
     }
     expandTacle() {
       this.tacle = this.pathToPlayer;
-      this.tacleLength += 0.05;
+      this.tacleLength += 0.3 / (1 + Math.min(this.tacleLength, 10));
     }
     render() {
       let happy = player?.caughtBy == this;
@@ -3039,16 +3040,18 @@
         drawLine(a, vpath[i - 1], width, this.tacleColor);
         remaining--;
       });
-      drawTile(this.pos, this.drawSize, this.tileInfo, this.color, this.angle, this.mirror);
+      drawTile(this.pos, this.drawSize.scale(1.1 - 0.3 * (this.tacleLength / this.maxLength) ** 2), this.tileInfo, this.color, this.angle, this.mirror);
     }
   };
 
   // src/Character.ts
+  var aaa = false;
   var Character = class extends EngineObject {
     constructor(pos) {
       super(pos, vec2(0.7, 0.7));
       this.frame = 0;
       this.direction = 1;
+      this.lastStepTime = 0;
       this.drawSize = vec2(0.7, 0.7);
       this.setCollision(true, false);
       this.renderOrder = 1;
@@ -3064,17 +3067,29 @@
           this.mirror = this.direction < 0;
         }
       }
+      let t = Date.now();
+      let v = this.velocity.length();
+      if (v > 0.01 && t > this.lastStepTime + 160) {
+        step2.play(void 0, aaa ? 1 : 0.7);
+        aaa = !aaa;
+        this.lastStepTime = t;
+      }
       let a = 0.5, b = 0.025;
       this.velocity = this.velocity.multiply(vec2(a)).add(vec2(b * moveInput.x, b * moveInput.y));
       this.caughtBy = null;
-      for (let t of tentaclers) {
-        for (let i = 0; i < t.tacleLength; i++) {
-          let p = t.tacle[i];
-          if (p?.distance(this.pos) < 0.7) {
+      let minDist = 1e6;
+      for (let t2 of tentaclers) {
+        for (let i = 0; i < t2.tacleLength; i++) {
+          let p = t2.tacle[i];
+          let dist = p?.distance(this.pos);
+          minDist = Math.min(dist, minDist);
+          if (dist < 0.7) {
             if (!this.caughtBy) {
               setTimeout(() => setLevel(), 1e3);
+              for (let i2 = 0; i2 < 5; i2++)
+                setTimeout(() => blip.play(), i2 * 200);
             }
-            this.caughtBy = t;
+            this.caughtBy = t2;
           }
         }
       }
@@ -3118,6 +3133,11 @@
   var sound_bounce = new Sound([, , 1e3, , 0.03, 0.02, 1, 2, , , 940, 0.03, , , , , 0.2, 0.6, , 0.06], 0);
   var sound_break = new Sound([, , 90, , 0.01, 0.03, 4, , , , , , , 9, 50, 0.2, , 0.2, 0.01], 0);
   var sound_start = new Sound([, 0, 500, , 0.04, 0.3, 1, 2, , , 570, 0.02, 0.02, , , , 0.04]);
+  var blip = new Sound([2, , 569, 0.02, 0.01, 0.03, 3, 1.8, 10, 29, , , , 0.6, , , 0.06, , 0.01, 0.02]);
+  var hum2 = new Sound([0.5, 0, 97.99886, 0.18, 0.62, 0.16, , 2.5, , , , , , 0.3, , 0.1, 0.03, 0.33, 0.19, , 184]);
+  var sssh2 = new Sound([0.1, , 87, 0.09, 0.04, 0.53, 4, 3.2, 1, 1, , , 0.29, 0.4, 15, 0.2, 0.21, 0.36, 0.26, 0.04, 698]);
+  var step3 = new Sound([0.5, , 293.66, , 0.01, 0.07, 4, 3.5, , , , , , 0.2, -1, 0.4, 0.05, 0.73, 0.06, , -2497]);
+  var step2 = new Sound([0.1, , 922, 0.01, , , , 5, , , , , , 9]);
   var tentaclers = [];
   var unlocked = false;
   var Brick = class extends EngineObject {
@@ -3214,13 +3234,13 @@
     let n = Number(e.key);
     if (levels[n])
       setLevel(n);
-    console.log(e);
     if (e.code == "KeyR")
       setLevel();
   };
   function setLevel(n) {
     if (!n)
       n = currentLevel;
+    sound_start.play();
     if (n >= levels.length) {
       n = 1;
     }
@@ -3252,6 +3272,9 @@
         }
         if (c == "t") {
           tentaclers.push(new Tentacler(at, 8, new Color(0.5, 0.5, 0)));
+        }
+        if (c == "F") {
+          tentaclers.push(new Tentacler(at, 70, new Color(0.5, 0, 0.5)));
         }
         if (c == ">") {
           new Stairs(at);
@@ -3290,7 +3313,7 @@
       s += "=\n";
       let { width, height, data } = d;
       data.forEach((v, i) => {
-        s += "  *@ TtWwK>/"[v];
+        s += "  *@ TtWwK>/F"[v];
         if ((i + 1) % width == 0)
           s += "\n";
       });
@@ -3300,7 +3323,6 @@
   window.onload = () => {
     let ut = untiled(window["TileMaps"].l);
     let ls = ut;
-    console.log(ls);
     let l1 = ls.split("=");
     for (let level of l1) {
       let lines = level.trim().split("\n");
